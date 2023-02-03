@@ -102,7 +102,6 @@ type AnyConsensusState = Vec<u8>;
 #[account]
 pub struct IbcStore {
     /// The set of all clients, indexed by their id.
-    // pub clients: BTreeMap<ClientId, ClientRecord>,
     pub client_types: BTreeMap<ClientId, ClientType>,
 
     pub client_state: BTreeMap<ClientId, AnyClientState>,

@@ -25,7 +25,9 @@ use std::time::Duration;
 
 use crate::IbcStore;
 
+/// A context supplying all the necessary read-only dependencies for processing any `ChannelMsg`.
 impl ChannelReader for IbcStore {
+    /// Returns the ChannelEnd for the given `port_id` and `chan_id`.
     fn channel_end(
         &self,
         port_id: &PortId,
@@ -44,6 +46,7 @@ impl ChannelReader for IbcStore {
         }
     }
 
+    /// Returns the ConnectionState for the given identifier `connection_id`.
     fn connection_end(&self, connection_id: &ConnectionId) -> Result<ConnectionEnd, ChannelError> {
         ConnectionReader::connection_end(self, connection_id).map_err(ChannelError::Connection)
     }
@@ -59,6 +62,8 @@ impl ChannelReader for IbcStore {
         }
     }
 
+    /// Returns the ClientState for the given identifier `client_id`. Necessary dependency towards
+    /// proof verification.
     fn client_state(&self, client_id: &ClientId) -> Result<Box<dyn ClientState>, ChannelError> {
         ClientReader::client_state(self, client_id)
             .map_err(|e| ChannelError::Connection(ConnectionError::Client(e)))
@@ -191,7 +196,7 @@ impl ChannelReader for IbcStore {
         todo!()
     }
 
-    /// Returns the `AnyConsensusState` for the given identifier `height`.
+    /// Returns the `ConsensusState` of the host (local) chain at a specific height.
     fn host_consensus_state(
         &self,
         height: &Height,
@@ -199,12 +204,13 @@ impl ChannelReader for IbcStore {
         ConnectionReader::host_consensus_state(self, height).map_err(ChannelError::Connection)
     }
 
+    /// Returns the pending `ConsensusState` of the host (local) chain.
     fn pending_host_consensus_state(&self) -> Result<Box<dyn ConsensusState>, ChannelError> {
         ClientReader::pending_host_consensus_state(self)
             .map_err(|e| ChannelError::Connection(ConnectionError::Client(e)))
     }
 
-    /// Returns the `ClientProcessedTimes` for the given identifier `client_id` & `height`.
+    /// Returns the time when the client state for the given [`ClientId`] was updated with a header for the given [`Height`]
     fn client_update_time(
         &self,
         client_id: &ClientId,
@@ -222,6 +228,7 @@ impl ChannelReader for IbcStore {
         }
     }
 
+    /// Returns the height when the client state for the given [`ClientId`] was updated with a header for the given [`Height`]
     fn client_update_height(
         &self,
         client_id: &ClientId,
