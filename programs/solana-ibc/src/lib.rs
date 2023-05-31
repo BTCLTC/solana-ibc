@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use anchor_lang::prelude::*;
+use ibc::core::router::ModuleId;
 use ibc::{
     core::{
         ics02_client::{
@@ -13,17 +14,13 @@ use ibc::{
             packet::{Receipt, Sequence},
         },
         ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId},
-        ics26_routing::context::ModuleId,
+        timestamp::Timestamp,
     },
-    timestamp::Timestamp,
     Height,
 };
 
-mod channel;
-mod client;
-mod connection;
-mod port;
-mod router;
+mod context;
+mod error;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -32,35 +29,6 @@ pub mod ibc_solana {
     use super::*;
 
     pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {
-        Ok(())
-    }
-
-    pub fn deliver(
-        ctx: Context<Deliver>,
-        messages: Vec<ibc_proto::google::protobuf::Any>,
-    ) -> Result<()> {
-        let ctx = &mut ctx.accounts.ibc_context.context;
-
-        let (events, logs, errors) = messages.into_iter().fold(
-            (vec![], vec![], vec![]),
-            |(mut events, mut logs, mut errors), msg| {
-                match ibc::core::ics26_routing::handler::deliver(ctx, msg) {
-                    Ok(ibc::core::ics26_routing::handler::MsgReceipt {
-                        events: temp_events,
-                        log: temp_logs,
-                    }) => {
-                        events.extend(temp_events);
-                        logs.extend(temp_logs);
-                    }
-                    Err(e) => errors.push(e),
-                }
-                (events, logs, errors)
-            },
-        );
-        msg!("[deliver]: events: {:?}", events);
-        msg!("[deliver]: logs: {:?}", logs);
-        msg!("[deliver]: errors: {:?}", errors);
-
         Ok(())
     }
 }

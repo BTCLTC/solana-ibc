@@ -1,0 +1,22 @@
+[package]
+name = "solana-ibc"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "solana_ibc"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "*"
+ibc = { version = "0.41.0", features = ["serde", "borsh"] }
+ibc-proto = { version = "0.30.0", features = ["borsh"]  }
+ics06-solomachine = { version = "0.1.0", git = "https://github.com/DaviRain-Su/ics06-solomachine.git", branch = "main" }
