@@ -22,7 +22,8 @@ use ibc::core::{
 use std::sync::Arc;
 use std::time::Duration;
 
-mod context;
+mod applications;
+mod core;
 mod error;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
