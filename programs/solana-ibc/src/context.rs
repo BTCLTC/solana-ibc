@@ -1,4 +1,3 @@
-// use crate::{prelude::*, Config, PacketCommitment as PacketCommitStore, TENDERMINT_CLIENT_TYPE, *};
 use crate::SolanaIbcContext;
 use core::time::Duration;
 use ibc::core::router::ModuleId;
@@ -39,62 +38,42 @@ use ibc::{
     Height, Signer,
 };
 use ibc_proto::{google::protobuf::Any, protobuf::Protobuf};
+use ics06_solomachine::client_state::ClientState as Ics06ClientState;
+use ics06_solomachine::consensus_state::ConsensusState as Ics06ConsensusState;
 use ics06_solomachine::cosmos::crypto::PublicKey;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-// use pallet_ibc_utils::module::{AddModule, Router};
 
-// #[derive(Clone, Debug)]
-// pub struct Context<T: Config> {
-//     pub _pd: PhantomData<T>,
-//     pub router: Router,
-// }
+pub const TENDERMINT_CLIENT_TYPE: &str = "07-tendermint";
+pub const SOLOMACHINE_CLIENT_TYPE: &str = "06-solomachine";
 
-// impl<T: Config> Context<T> {
-//     pub fn new() -> Self {
-//         let router = Router::new();
-//         let r = T::IbcModule::add_module(router);
-//         Self {
-//             _pd: PhantomData::default(),
-//             router: r,
-//         }
-//     }
+impl SolanaIbcContext {
+    pub fn client_type(&self, client_id: &ClientId) -> Result<ClientType, ClientError> {
+        let data = self
+            .ibc_store
+            .client_types
+            .get(client_id)
+            .ok_or(ClientError::Other {
+                description: format!("Client({}) not found!", client_id.clone()),
+            })?;
 
-//     pub fn add_route(
-//         &mut self,
-//         module_id: ModuleId,
-//         module: impl Module + 'static,
-//     ) -> Result<(), String> {
-//         match self.router.router.insert(module_id, Arc::new(module)) {
-//             None => Ok(()),
-//             Some(_) => Err("Duplicate module_id".to_owned()),
-//         }
-//     }
-
-//     fn client_type(&self, client_id: &ClientId) -> Result<ClientType, ClientError> {
-//         let data = <ClientTypeById<T>>::get(client_id.clone()).ok_or(ClientError::Other {
-//             description: format!("Client({}) not found!", client_id.clone()),
-//         })?;
-//         match data.as_str() {
-//             TENDERMINT_CLIENT_TYPE => {
-//                 ClientType::new(TENDERMINT_CLIENT_TYPE.into()).map_err(|e| ClientError::Other {
-//                     description: format!("{}", e),
-//                 })
-//             }
-//             unimplemented => {
-//                 return Err(ClientError::UnknownClientStateType {
-//                     client_state_type: unimplemented.to_string(),
-//                 })
-//             }
-//         }
-//     }
-// }
-
-// impl<T: Config> Default for Context<T> {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
+        match data.as_str() {
+            TENDERMINT_CLIENT_TYPE => {
+                ClientType::new(TENDERMINT_CLIENT_TYPE.into()).map_err(|e| ClientError::Other {
+                    description: format!("{}", e),
+                })
+            }
+            SOLOMACHINE_CLIENT_TYPE => {
+                ClientType::new(SOLOMACHINE_CLIENT_TYPE.into()).map_err(|e| ClientError::Other {
+                    description: format!("{}", e),
+                })
+            }
+            unimplemented => Err(ClientError::UnknownClientStateType {
+                client_state_type: unimplemented.to_string(),
+            }),
+        }
+    }
+}
 
 impl ibc::core::router::Router for SolanaIbcContext {
     /// Returns a reference to a `Module` registered against the specified `ModuleId`
@@ -127,6 +106,7 @@ impl ibc::core::router::Router for SolanaIbcContext {
     /// Return the module_id associated with a given port_id
     fn lookup_module_by_port(&self, port_id: &PortId) -> Option<ModuleId> {
         // self.ibc_store.lock().port_to_module.get(port_id).cloned()
+        // todo(davirian)
         todo!()
     }
 }
@@ -135,10 +115,27 @@ impl ValidationContext for SolanaIbcContext {
     /// Returns the ClientState for the given identifier `client_id`.
     fn client_state(&self, client_id: &ClientId) -> Result<Box<dyn ClientState>, ContextError> {
         match self.ibc_store.client_states.get(client_id) {
-            Some(client_record) => {
-                // todo (davirain) need decode contruct type by clienttype
-                todo!()
-            }
+            Some(data) => match self.client_type(client_id)?.as_str() {
+                TENDERMINT_CLIENT_TYPE => {
+                    let result: Ics07ClientState =
+                        Protobuf::<Any>::decode_vec(data).map_err(|e| ClientError::Other {
+                            description: format!("Decode Ics07ClientState failed: {:?}", e),
+                        })?;
+
+                    Ok(result.into_box())
+                }
+                SOLOMACHINE_CLIENT_TYPE => {
+                    let result: Ics06ClientState =
+                        Protobuf::<Any>::decode_vec(data).map_err(|e| ClientError::Other {
+                            description: format!("Decode Ics06ClientState failed: {:?}", e),
+                        })?;
+
+                    Ok(result.into_box())
+                }
+                unimplemented => Err(ClientError::Other {
+                    description: format!("unknow client state type:({})", unimplemented),
+                }),
+            },
             None => Err(ClientError::ClientStateNotFound {
                 client_id: client_id.clone(),
             }),
@@ -149,6 +146,8 @@ impl ValidationContext for SolanaIbcContext {
     /// Tries to decode the given `client_state` into a concrete light client state.
     fn decode_client_state(&self, client_state: Any) -> Result<Box<dyn ClientState>, ContextError> {
         if let Ok(client_state) = Ics07ClientState::try_from(client_state.clone()) {
+            Ok(client_state.into_box())
+        } else if let Ok(client_state) = Ics06ClientState::try_from(client_state.clone()) {
             Ok(client_state.into_box())
         } else {
             Err(ClientError::UnknownClientStateType {
@@ -170,11 +169,25 @@ impl ValidationContext for SolanaIbcContext {
         let height = Height::new(client_cons_state_path.epoch, client_cons_state_path.height)?;
         match self.ibc_store.consensus_states.get(client_id) {
             Some(client_record) => match client_record.get(&height) {
-                Some(consensus_state) => {
-                    // Ok(consensus_state.clone())
-                    // todo davirian
-                    todo!()
-                }
+                Some(data) => match self.client_type(client_id)?.as_str() {
+                    TENDERMINT_CLIENT_TYPE => {
+                        let result: Ics07ConsensusState = Protobuf::<Any>::decode_vec(data)
+                            .map_err(|e| ClientError::Other {
+                                description: format!("Decode Ics07ConsensusState failed: {:?}", e),
+                            })?;
+                        Ok(result.into_box())
+                    }
+                    SOLOMACHINE_CLIENT_TYPE => {
+                        let result: Ics06ConsensusState = Protobuf::<Any>::decode_vec(data)
+                            .map_err(|e| ClientError::Other {
+                                description: format!("Decode Ics06ConsensusState failed: {:?}", e),
+                            })?;
+                        Ok(result.into_box())
+                    }
+                    unimplemented => Err(ClientError::Other {
+                        description: format!("unknow client state type: {}", unimplemented),
+                    }),
+                },
                 None => Err(ClientError::ConsensusStateNotFound {
                     client_id: client_id.clone(),
                     height,
@@ -209,8 +222,29 @@ impl ValidationContext for SolanaIbcContext {
         for h in heights {
             if h > *height {
                 // unwrap should never happen, as the consensus state for h must exist
-                // return Ok(Some(client_record.get(&h).unwrap().clone()));
-                todo!()
+                let data = client_record.get(&h).unwrap().clone();
+                match self.client_type(client_id)?.as_str() {
+                    TENDERMINT_CLIENT_TYPE => {
+                        let result: Ics07ConsensusState = Protobuf::<Any>::decode_vec(&data)
+                            .map_err(|e| ClientError::Other {
+                                description: format!("Decode Ics07ConsensusState failed: {:?}", e),
+                            })?;
+                        return Ok(Some(result.into_box()));
+                    }
+                    SOLOMACHINE_CLIENT_TYPE => {
+                        let result: Ics06ConsensusState = Protobuf::<Any>::decode_vec(&data)
+                            .map_err(|e| ClientError::Other {
+                                description: format!("Decode Ics06ConsensusState failed: {:?}", e),
+                            })?;
+                        return Ok(Some(result.into_box()));
+                    }
+                    unimplemented => {
+                        return Err(ClientError::Other {
+                            description: format!("unknow client state type: {}", unimplemented),
+                        }
+                        .into())
+                    }
+                }
             }
         }
         Ok(None)
@@ -237,9 +271,29 @@ impl ValidationContext for SolanaIbcContext {
         for h in heights {
             if h < *height {
                 // unwrap should never happen, as the consensus state for h must exist
-                // decode by client type and returen
-                // return Ok(Some(client_record.get(&h).unwrap().clone()));
-                todo!()
+                let data = client_record.get(&h).unwrap().clone();
+                match self.client_type(client_id)?.as_str() {
+                    TENDERMINT_CLIENT_TYPE => {
+                        let result: Ics07ConsensusState = Protobuf::<Any>::decode_vec(&data)
+                            .map_err(|e| ClientError::Other {
+                                description: format!("Decode Ics07ConsensusState failed: {:?}", e),
+                            })?;
+                        return Ok(Some(result.into_box()));
+                    }
+                    SOLOMACHINE_CLIENT_TYPE => {
+                        let result: Ics06ConsensusState = Protobuf::<Any>::decode_vec(&data)
+                            .map_err(|e| ClientError::Other {
+                                description: format!("Decode Ics06ConsensusState failed: {:?}", e),
+                            })?;
+                        return Ok(Some(result.into_box()));
+                    }
+                    unimplemented => {
+                        return Err(ClientError::Other {
+                            description: format!("unknow client state type: {}", unimplemented),
+                        }
+                        .into())
+                    }
+                }
             }
         }
         Ok(None)
