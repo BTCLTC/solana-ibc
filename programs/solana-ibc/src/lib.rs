@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use anchor_lang::prelude::*;
 use ibc::core::ics02_client::client_type::ClientType;
-use ibc::core::router::Module;
 use ibc::core::router::ModuleId;
 use ibc::core::{
     events::IbcEvent,
@@ -16,12 +15,10 @@ use ibc::core::{
     ics24_host::identifier::{ChainId, ChannelId, ClientId, ConnectionId, PortId},
     timestamp::Timestamp,
 };
-use std::sync::Arc;
-use std::time::Duration;
 
 mod applications;
-mod core;
 mod error;
+mod ibc_core;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -67,7 +64,6 @@ pub mod ibc_solana {
 pub struct Initialize {}
 
 #[derive(Accounts)]
-
 pub struct Deliver<'info> {
     ibc_context: Account<'info, SolanaIbcContext>,
 }
@@ -98,10 +94,17 @@ pub struct SolanaIbcContext {
     pub ibc_store: SolanaIbcStore,
 
     // /// To implement ValidationContext Router
-    // router: BTreeMap<ModuleId, Arc<dyn Module>>,
+    router: BTreeMap<ModuleId, IbcModule>,
+
     pub events: Vec<IbcEvent>,
 
     pub logs: Vec<String>,
+}
+
+#[derive(Debug, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
+enum IbcModule {
+    Transfer(u64),
+    Dummy(u64),
 }
 
 type PortChannelIdMap<V> = BTreeMap<PortId, BTreeMap<ChannelId, V>>;

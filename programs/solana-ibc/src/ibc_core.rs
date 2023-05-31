@@ -42,7 +42,6 @@ use ics06_solomachine::client_state::ClientState as Ics06ClientState;
 use ics06_solomachine::consensus_state::ConsensusState as Ics06ConsensusState;
 use ics06_solomachine::cosmos::crypto::PublicKey;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 pub const TENDERMINT_CLIENT_TYPE: &str = "07-tendermint";
 pub const SOLOMACHINE_CLIENT_TYPE: &str = "06-solomachine";
