@@ -105,9 +105,11 @@ impl ibc::core::router::Router for SolanaIbcContext {
 
     /// Return the module_id associated with a given port_id
     fn lookup_module_by_port(&self, port_id: &PortId) -> Option<ModuleId> {
-        // self.ibc_store.lock().port_to_module.get(port_id).cloned()
-        // todo(davirian)
-        todo!()
+        // ref: https://github.com/DaviRain-Su/pallet-ibc/blob/5eb1d8f4e85cb304950f54299342281c720e2156/core/src/context.rs#L123
+        match port_id.as_str() {
+            TRANSFER_PORT_ID => Some(ModuleId::new(TRANSFER_MODULE_ID.to_string())),
+            _ => None,
+        }
     }
 }
 
