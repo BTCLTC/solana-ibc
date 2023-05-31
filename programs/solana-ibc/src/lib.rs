@@ -32,6 +32,35 @@ pub mod ibc_solana {
     pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {
         Ok(())
     }
+
+    pub fn deliver(
+        ctx: Context<Deliver>,
+        messages: Vec<ibc_proto::google::protobuf::Any>,
+    ) -> Result<()> {
+        // let ctx = &mut ctx.accounts.ibc_context.context;
+
+        // let (events, logs, errors) = messages.into_iter().fold(
+        //     (vec![], vec![], vec![]),
+        //     |(mut events, mut logs, mut errors), msg| {
+        //         match ibc::core::ics26_routing::handler::deliver(ctx, msg) {
+        //             Ok(ibc::core::ics26_routing::handler::MsgReceipt {
+        //                 events: temp_events,
+        //                 log: temp_logs,
+        //             }) => {
+        //                 events.extend(temp_events);
+        //                 logs.extend(temp_logs);
+        //             }
+        //             Err(e) => errors.push(e),
+        //         }
+        //         (events, logs, errors)
+        //     },
+        // );
+        // msg!("[deliver]: events: {:?}", events);
+        // msg!("[deliver]: logs: {:?}", logs);
+        // msg!("[deliver]: errors: {:?}", errors);
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -40,12 +69,13 @@ pub struct Initialize {}
 #[derive(Accounts)]
 
 pub struct Deliver<'info> {
-    ibc_context: Account<'info, SolanaIbcStore>,
+    ibc_context: Account<'info, SolanaIbcContext>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct HostBlock {}
 
+#[account]
 /// A context implementing the dependencies necessary for testing any IBC module.
 #[derive(Debug)]
 pub struct SolanaIbcContext {
@@ -62,14 +92,13 @@ pub struct SolanaIbcContext {
     history: Vec<HostBlock>,
 
     /// Average time duration between blocks
-    block_time: Duration,
+    block_time: u64,
 
     /// An object that stores all IBC related data.
     pub ibc_store: SolanaIbcStore,
 
-    /// To implement ValidationContext Router
-    router: BTreeMap<ModuleId, Arc<dyn Module>>,
-
+    // /// To implement ValidationContext Router
+    // router: BTreeMap<ModuleId, Arc<dyn Module>>,
     pub events: Vec<IbcEvent>,
 
     pub logs: Vec<String>,
@@ -78,8 +107,7 @@ pub struct SolanaIbcContext {
 type PortChannelIdMap<V> = BTreeMap<PortId, BTreeMap<ChannelId, V>>;
 
 /// An object that stores all IBC related data.
-#[account]
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct SolanaIbcStore {
     /// The set of all client states, indexed by their id.
     pub client_states: BTreeMap<ClientId, Vec<u8>>,

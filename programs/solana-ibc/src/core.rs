@@ -78,29 +78,32 @@ impl SolanaIbcContext {
 impl ibc::core::router::Router for SolanaIbcContext {
     /// Returns a reference to a `Module` registered against the specified `ModuleId`
     fn get_route(&self, module_id: &ModuleId) -> Option<&dyn Module> {
-        self.router.get(module_id).map(Arc::as_ref)
+        // self.router.get(module_id).map(Arc::as_ref)
+        todo!()
     }
 
     /// Returns a mutable reference to a `Module` registered against the specified `ModuleId`
     fn get_route_mut(&mut self, module_id: &ModuleId) -> Option<&mut dyn Module> {
-        // NOTE: The following:
+        // // NOTE: The following:
 
-        // self.router.get_mut(module_id).and_then(Arc::get_mut)
+        // // self.router.get_mut(module_id).and_then(Arc::get_mut)
 
-        // doesn't work due to a compiler bug. So we expand it out manually.
+        // // doesn't work due to a compiler bug. So we expand it out manually.
 
-        match self.router.get_mut(module_id) {
-            Some(arc_mod) => match Arc::get_mut(arc_mod) {
-                Some(m) => Some(m),
-                None => None,
-            },
-            None => None,
-        }
+        // match self.router.get_mut(module_id) {
+        //     Some(arc_mod) => match Arc::get_mut(arc_mod) {
+        //         Some(m) => Some(m),
+        //         None => None,
+        //     },
+        //     None => None,
+        // }
+        todo!()
     }
 
     /// Returns true if the `Router` has a `Module` registered against the specified `ModuleId`
     fn has_route(&self, module_id: &ModuleId) -> bool {
-        self.router.get(module_id).is_some()
+        // self.router.get(module_id).is_some()
+        todo!()
     }
 
     /// Return the module_id associated with a given port_id
@@ -585,7 +588,8 @@ impl ValidationContext for SolanaIbcContext {
 
     /// Returns the maximum expected time per block
     fn max_expected_time_per_block(&self) -> Duration {
-        self.block_time
+        // todo(block time is nanos)
+        Duration::from_nanos(self.block_time)
     }
 
     /// Validates the `signer` field of IBC messages, which represents the address
