@@ -1,4 +1,4 @@
-use crate::SolanaIbcContext;
+use crate::SolanaIbcStore;
 use core::time::Duration;
 use ibc::core::router::ModuleId;
 use ibc::{
@@ -46,15 +46,11 @@ use std::collections::BTreeMap;
 pub const TENDERMINT_CLIENT_TYPE: &str = "07-tendermint";
 pub const SOLOMACHINE_CLIENT_TYPE: &str = "06-solomachine";
 
-impl SolanaIbcContext {
+impl SolanaIbcStore {
     pub fn client_type(&self, client_id: &ClientId) -> Result<ClientType, ClientError> {
-        let data = self
-            .ibc_store
-            .client_types
-            .get(client_id)
-            .ok_or(ClientError::Other {
-                description: format!("Client({}) not found!", client_id.clone()),
-            })?;
+        let data = self.client_types.get(client_id).ok_or(ClientError::Other {
+            description: format!("Client({}) not found!", client_id.clone()),
+        })?;
 
         match data.as_str() {
             TENDERMINT_CLIENT_TYPE => {
@@ -74,7 +70,7 @@ impl SolanaIbcContext {
     }
 }
 
-impl ibc::core::router::Router for SolanaIbcContext {
+impl ibc::core::router::Router for SolanaIbcStore {
     /// Returns a reference to a `Module` registered against the specified `ModuleId`
     fn get_route(&self, module_id: &ModuleId) -> Option<&dyn Module> {
         // self.router.get(module_id).map(Arc::as_ref)
@@ -115,10 +111,10 @@ impl ibc::core::router::Router for SolanaIbcContext {
     }
 }
 
-impl ValidationContext for SolanaIbcContext {
+impl ValidationContext for SolanaIbcStore {
     /// Returns the ClientState for the given identifier `client_id`.
     fn client_state(&self, client_id: &ClientId) -> Result<Box<dyn ClientState>, ContextError> {
-        match self.ibc_store.client_states.get(client_id) {
+        match self.client_states.get(client_id) {
             Some(data) => match self.client_type(client_id)?.as_str() {
                 TENDERMINT_CLIENT_TYPE => {
                     let result: Ics07ClientState =
@@ -171,7 +167,7 @@ impl ValidationContext for SolanaIbcContext {
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
         let client_id = &client_cons_state_path.client_id;
         let height = Height::new(client_cons_state_path.epoch, client_cons_state_path.height)?;
-        match self.ibc_store.consensus_states.get(client_id) {
+        match self.consensus_states.get(client_id) {
             Some(client_record) => match client_record.get(&height) {
                 Some(data) => match self.client_type(client_id)?.as_str() {
                     TENDERMINT_CLIENT_TYPE => {
@@ -211,8 +207,7 @@ impl ValidationContext for SolanaIbcContext {
         client_id: &ClientId,
         height: &Height,
     ) -> Result<Option<Box<dyn ConsensusState>>, ContextError> {
-        let ibc_store = self.ibc_store.clone();
-        let client_record = ibc_store.consensus_states.get(client_id).ok_or_else(|| {
+        let client_record = self.consensus_states.get(client_id).ok_or_else(|| {
             ClientError::ClientStateNotFound {
                 client_id: client_id.clone(),
             }
@@ -260,8 +255,7 @@ impl ValidationContext for SolanaIbcContext {
         client_id: &ClientId,
         height: &Height,
     ) -> Result<Option<Box<dyn ConsensusState>>, ContextError> {
-        let ibc_store = self.ibc_store.clone();
-        let client_record = ibc_store.consensus_states.get(client_id).ok_or_else(|| {
+        let client_record = self.consensus_states.get(client_id).ok_or_else(|| {
             ClientError::ClientStateNotFound {
                 client_id: client_id.clone(),
             }
@@ -343,12 +337,12 @@ impl ValidationContext for SolanaIbcContext {
     /// thus far. The value of this counter should increase only via method
     /// `ExecutionContext::increase_client_counter`.
     fn client_counter(&self) -> Result<u64, ContextError> {
-        Ok(self.ibc_store.client_ids_counter)
+        Ok(self.client_ids_counter)
     }
 
     /// Returns the ConnectionEnd for the given identifier `conn_id`.
     fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd, ContextError> {
-        match self.ibc_store.connections.get(conn_id) {
+        match self.connections.get(conn_id) {
             Some(connection_end) => Ok(connection_end.clone()),
             None => Err(ConnectionError::ConnectionNotFound {
                 connection_id: conn_id.clone(),
@@ -382,7 +376,7 @@ impl ValidationContext for SolanaIbcContext {
 
     /// Returns a counter on how many connections have been created thus far.
     fn connection_counter(&self) -> Result<u64, ContextError> {
-        Ok(self.ibc_store.connection_ids_counter)
+        Ok(self.connection_ids_counter)
     }
 
     /// Returns the `ChannelEnd` for the given `port_id` and `chan_id`.
@@ -391,7 +385,6 @@ impl ValidationContext for SolanaIbcContext {
         let channel_id = &channel_end_path.1;
 
         match self
-            .ibc_store
             .channels
             .get(port_id)
             .and_then(|map| map.get(channel_id))
@@ -414,7 +407,6 @@ impl ValidationContext for SolanaIbcContext {
         let channel_id = &seq_send_path.1;
 
         match self
-            .ibc_store
             .next_sequence_send
             .get(port_id)
             .and_then(|map| map.get(channel_id))
@@ -437,7 +429,6 @@ impl ValidationContext for SolanaIbcContext {
         let channel_id = &seq_recv_path.1;
 
         match self
-            .ibc_store
             .next_sequence_recv
             .get(port_id)
             .and_then(|map| map.get(channel_id))
@@ -457,7 +448,6 @@ impl ValidationContext for SolanaIbcContext {
         let channel_id = &seq_ack_path.1;
 
         match self
-            .ibc_store
             .next_sequence_ack
             .get(port_id)
             .and_then(|map| map.get(channel_id))
@@ -481,7 +471,6 @@ impl ValidationContext for SolanaIbcContext {
         let seq = &commitment_path.sequence;
 
         match self
-            .ibc_store
             .packet_commitment
             .get(port_id)
             .and_then(|map| map.get(channel_id))
@@ -500,7 +489,6 @@ impl ValidationContext for SolanaIbcContext {
         let seq = &receipt_path.sequence;
 
         match self
-            .ibc_store
             .packet_receipt
             .get(port_id)
             .and_then(|map| map.get(channel_id))
@@ -522,7 +510,6 @@ impl ValidationContext for SolanaIbcContext {
         let seq = &ack_path.sequence;
 
         match self
-            .ibc_store
             .packet_acknowledgement
             .get(port_id)
             .and_then(|map| map.get(channel_id))
@@ -543,7 +530,6 @@ impl ValidationContext for SolanaIbcContext {
         height: &Height,
     ) -> Result<Timestamp, ContextError> {
         match self
-            .ibc_store
             .client_processed_times
             .get(&(client_id.clone(), *height))
         {
@@ -565,7 +551,6 @@ impl ValidationContext for SolanaIbcContext {
         height: &Height,
     ) -> Result<Height, ContextError> {
         match self
-            .ibc_store
             .client_processed_heights
             .get(&(client_id.clone(), *height))
         {
@@ -582,13 +567,14 @@ impl ValidationContext for SolanaIbcContext {
     /// The value of this counter should increase only via method
     /// `ExecutionContext::increase_channel_counter`.
     fn channel_counter(&self) -> Result<u64, ContextError> {
-        Ok(self.ibc_store.channel_ids_counter)
+        Ok(self.channel_ids_counter)
     }
 
     /// Returns the maximum expected time per block
     fn max_expected_time_per_block(&self) -> Duration {
         // todo(block time is nanos)
-        Duration::from_nanos(self.block_time)
+        // Duration::from_nanos(self.block_time)
+        todo!()
     }
 
     /// Validates the `signer` field of IBC messages, which represents the address
@@ -598,7 +584,7 @@ impl ValidationContext for SolanaIbcContext {
     }
 }
 
-impl ExecutionContext for SolanaIbcContext {
+impl ExecutionContext for SolanaIbcStore {
     /// Called upon successful client creation and update
     fn store_client_state(
         &mut self,
@@ -608,13 +594,9 @@ impl ExecutionContext for SolanaIbcContext {
         let client_type = client_state.client_type();
         let data = client_state.encode_vec();
 
-        self.ibc_store
-            .client_states
-            .insert(client_state_path.0.clone(), data);
+        self.client_states.insert(client_state_path.0.clone(), data);
 
-        self.ibc_store
-            .client_types
-            .insert(client_state_path.0, client_type);
+        self.client_types.insert(client_state_path.0, client_type);
 
         Ok(())
     }
@@ -626,7 +608,6 @@ impl ExecutionContext for SolanaIbcContext {
         consensus_state: Box<dyn ConsensusState>,
     ) -> Result<(), ContextError> {
         let client_record = self
-            .ibc_store
             .consensus_states
             .entry(consensus_state_path.client_id)
             .or_insert(BTreeMap::default());
@@ -645,7 +626,7 @@ impl ExecutionContext for SolanaIbcContext {
     /// Increases the counter which keeps track of how many clients have been created.
     /// Should never fail.
     fn increase_client_counter(&mut self) {
-        self.ibc_store.client_ids_counter += 1
+        self.client_ids_counter += 1
     }
 
     /// Called upon successful client update.
@@ -658,7 +639,6 @@ impl ExecutionContext for SolanaIbcContext {
         timestamp: Timestamp,
     ) -> Result<(), ContextError> {
         let _ = self
-            .ibc_store
             .client_processed_times
             .insert((client_id, height), timestamp);
         Ok(())
@@ -674,7 +654,6 @@ impl ExecutionContext for SolanaIbcContext {
         host_height: Height,
     ) -> Result<(), ContextError> {
         let _ = self
-            .ibc_store
             .client_processed_heights
             .insert((client_id, height), host_height);
         Ok(())
@@ -687,9 +666,7 @@ impl ExecutionContext for SolanaIbcContext {
         connection_end: ConnectionEnd,
     ) -> Result<(), ContextError> {
         let connection_id = connection_path.0.clone();
-        self.ibc_store
-            .connections
-            .insert(connection_id, connection_end);
+        self.connections.insert(connection_id, connection_end);
         Ok(())
     }
 
@@ -700,7 +677,7 @@ impl ExecutionContext for SolanaIbcContext {
         conn_id: ConnectionId,
     ) -> Result<(), ContextError> {
         let client_id = client_connection_path.0.clone();
-        self.ibc_store.client_connections.insert(client_id, conn_id);
+        self.client_connections.insert(client_id, conn_id);
         Ok(())
     }
 
@@ -708,7 +685,7 @@ impl ExecutionContext for SolanaIbcContext {
     /// Increases the counter which keeps track of how many connections have been created.
     /// Should never fail.
     fn increase_connection_counter(&mut self) {
-        self.ibc_store.connection_ids_counter += 1;
+        self.connection_ids_counter += 1;
     }
 
     /// Stores the given packet commitment at the given store path
@@ -717,8 +694,7 @@ impl ExecutionContext for SolanaIbcContext {
         commitment_path: &CommitmentPath,
         commitment: PacketCommitment,
     ) -> Result<(), ContextError> {
-        self.ibc_store
-            .packet_commitment
+        self.packet_commitment
             .entry(commitment_path.port_id.clone())
             .or_default()
             .entry(commitment_path.channel_id.clone())
@@ -732,8 +708,7 @@ impl ExecutionContext for SolanaIbcContext {
         &mut self,
         commitment_path: &CommitmentPath,
     ) -> Result<(), ContextError> {
-        self.ibc_store
-            .packet_commitment
+        self.packet_commitment
             .get_mut(&commitment_path.port_id)
             .and_then(|map| map.get_mut(&commitment_path.channel_id))
             .and_then(|map| map.remove(&commitment_path.sequence));
@@ -746,8 +721,7 @@ impl ExecutionContext for SolanaIbcContext {
         receipt_path: &ReceiptPath,
         receipt: Receipt,
     ) -> Result<(), ContextError> {
-        self.ibc_store
-            .packet_receipt
+        self.packet_receipt
             .entry(receipt_path.port_id.clone())
             .or_default()
             .entry(receipt_path.channel_id.clone())
@@ -766,8 +740,7 @@ impl ExecutionContext for SolanaIbcContext {
         let channel_id = ack_path.channel_id.clone();
         let seq = ack_path.sequence;
 
-        self.ibc_store
-            .packet_acknowledgement
+        self.packet_acknowledgement
             .entry(port_id)
             .or_default()
             .entry(channel_id)
@@ -782,8 +755,7 @@ impl ExecutionContext for SolanaIbcContext {
         let channel_id = ack_path.channel_id.clone();
         let sequence = ack_path.sequence;
 
-        self.ibc_store
-            .packet_acknowledgement
+        self.packet_acknowledgement
             .get_mut(&port_id)
             .and_then(|map| map.get_mut(&channel_id))
             .and_then(|map| map.remove(&sequence));
@@ -799,8 +771,7 @@ impl ExecutionContext for SolanaIbcContext {
         let port_id = channel_end_path.0.clone();
         let channel_id = channel_end_path.1.clone();
 
-        self.ibc_store
-            .channels
+        self.channels
             .entry(port_id)
             .or_default()
             .insert(channel_id, channel_end);
@@ -816,8 +787,7 @@ impl ExecutionContext for SolanaIbcContext {
         let port_id = seq_send_path.0.clone();
         let channel_id = seq_send_path.1.clone();
 
-        self.ibc_store
-            .next_sequence_send
+        self.next_sequence_send
             .entry(port_id)
             .or_default()
             .insert(channel_id, seq);
@@ -833,8 +803,7 @@ impl ExecutionContext for SolanaIbcContext {
         let port_id = seq_recv_path.0.clone();
         let channel_id = seq_recv_path.1.clone();
 
-        self.ibc_store
-            .next_sequence_recv
+        self.next_sequence_recv
             .entry(port_id)
             .or_default()
             .insert(channel_id, seq);
@@ -850,8 +819,7 @@ impl ExecutionContext for SolanaIbcContext {
         let port_id = seq_ack_path.0.clone();
         let channel_id = seq_ack_path.1.clone();
 
-        self.ibc_store
-            .next_sequence_ack
+        self.next_sequence_ack
             .entry(port_id)
             .or_default()
             .insert(channel_id, seq);
@@ -862,7 +830,7 @@ impl ExecutionContext for SolanaIbcContext {
     /// Increases the counter which keeps track of how many channels have been created.
     /// Should never fail.
     fn increase_channel_counter(&mut self) {
-        self.ibc_store.channel_ids_counter += 1;
+        self.channel_ids_counter += 1;
     }
 
     /// Emit the given IBC event

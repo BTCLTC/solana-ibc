@@ -95,10 +95,23 @@ pub struct SolanaIbcContext {
 
     // /// To implement ValidationContext Router
     router: BTreeMap<ModuleId, IbcModule>,
+}
 
-    pub events: Vec<IbcEvent>,
-
-    pub logs: Vec<String>,
+pub trait SolanaIbcStoreHost {
+    ///
+    fn get_solana_ibc_store() -> SolanaIbcStore {
+        // let store =
+        //     near_sdk::env::storage_read(&StorageKey::NearIbcStore.try_to_vec().unwrap()).unwrap();
+        // let store = NearIbcStore::try_from_slice(&store).unwrap();
+        // store
+        todo!()
+    }
+    ///
+    fn set_solana_ibc_store(store: &SolanaIbcStore) {
+        // let store = store.try_to_vec().unwrap();
+        // near_sdk::env::storage_write(b"ibc_store", &store);
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -168,4 +181,8 @@ pub struct SolanaIbcStore {
 
     // Used by unordered channel
     pub packet_receipt: PortChannelIdMap<BTreeMap<Sequence, Receipt>>,
+
+    pub events: Vec<IbcEvent>,
+
+    pub logs: Vec<String>,
 }

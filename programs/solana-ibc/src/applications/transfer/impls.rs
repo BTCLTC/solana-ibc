@@ -1,4 +1,5 @@
 use crate::applications::transfer::TransferModule;
+use crate::SolanaIbcStoreHost;
 use ibc::applications::transfer::context::{
     TokenTransferExecutionContext, TokenTransferValidationContext,
 };
@@ -11,12 +12,14 @@ use ibc::core::ics03_connection::connection::ConnectionEnd;
 use ibc::core::ics04_channel::channel::ChannelEnd;
 use ibc::core::ics04_channel::commitment::PacketCommitment;
 use ibc::core::ics04_channel::context::{SendPacketExecutionContext, SendPacketValidationContext};
+use ibc::core::ics04_channel::error::PacketError;
 use ibc::core::ics04_channel::packet::Sequence;
 use ibc::core::ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId};
 use ibc::core::ics24_host::path::{
     ChannelEndPath, ClientConsensusStatePath, CommitmentPath, SeqSendPath,
 };
 use ibc::core::ContextError;
+use ibc::core::ValidationContext;
 use ibc::Signer;
 
 impl TokenTransferValidationContext for TransferModule {
@@ -100,32 +103,32 @@ impl TokenTransferExecutionContext for TransferModule {
 impl SendPacketValidationContext for TransferModule {
     /// Returns the ChannelEnd for the given `port_id` and `chan_id`.
     fn channel_end(&self, channel_end_path: &ChannelEndPath) -> Result<ChannelEnd, ContextError> {
-        todo!()
+        ValidationContext::channel_end(&Self::get_solana_ibc_store(), channel_end_path)
     }
 
     /// Returns the ConnectionState for the given identifier `connection_id`.
     fn connection_end(&self, connection_id: &ConnectionId) -> Result<ConnectionEnd, ContextError> {
-        todo!()
+        ValidationContext::connection_end(&Self::get_solana_ibc_store(), connection_id)
     }
 
     /// Returns the ClientState for the given identifier `client_id`. Necessary dependency towards
     /// proof verification.
     fn client_state(&self, client_id: &ClientId) -> Result<Box<dyn ClientState>, ContextError> {
-        todo!()
+        ValidationContext::client_state(&Self::get_solana_ibc_store(), client_id)
     }
 
     fn client_consensus_state(
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Box<dyn ConsensusState>, ContextError> {
-        todo!()
+        ValidationContext::consensus_state(&Self::get_solana_ibc_store(), client_cons_state_path)
     }
 
     fn get_next_sequence_send(
         &self,
         seq_send_path: &SeqSendPath,
     ) -> Result<Sequence, ContextError> {
-        todo!()
+        ValidationContext::get_next_sequence_send(&Self::get_solana_ibc_store(), seq_send_path)
     }
 }
 
@@ -135,7 +138,18 @@ impl SendPacketExecutionContext for TransferModule {
         seq_send_path: &SeqSendPath,
         seq: Sequence,
     ) -> Result<(), ContextError> {
-        todo!()
+        let mut store = Self::get_solana_ibc_store();
+        let port_id = seq_send_path.0.clone();
+        let channel_id = seq_send_path.1.clone();
+
+        store
+            .next_sequence_send
+            .entry(port_id)
+            .or_default()
+            .insert(channel_id, seq);
+        Self::set_solana_ibc_store(&store);
+
+        Ok(())
     }
 
     fn store_packet_commitment(
@@ -143,16 +157,36 @@ impl SendPacketExecutionContext for TransferModule {
         commitment_path: &CommitmentPath,
         commitment: PacketCommitment,
     ) -> Result<(), ContextError> {
-        todo!()
+        let mut store = Self::get_solana_ibc_store();
+
+        store
+            .packet_commitment
+            .entry(commitment_path.port_id.clone())
+            .or_default()
+            .entry(commitment_path.channel_id.clone())
+            .or_default()
+            .insert(commitment_path.sequence, commitment);
+
+        Self::set_solana_ibc_store(&store);
+
+        Ok(())
     }
 
     /// Ibc events
     fn emit_ibc_event(&mut self, event: IbcEvent) {
-        todo!()
+        let mut store = Self::get_solana_ibc_store();
+
+        store.events.push(event);
+
+        Self::set_solana_ibc_store(&store);
     }
 
     /// Logging facility
     fn log_message(&mut self, message: String) {
-        todo!()
+        let mut store = Self::get_solana_ibc_store();
+
+        store.logs.push(message);
+
+        Self::set_solana_ibc_store(&store);
     }
 }
