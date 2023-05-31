@@ -1,4 +1,4 @@
-# ibc-solana 
+# Solana Ibc
 
 ibc protocol implement on solana
 

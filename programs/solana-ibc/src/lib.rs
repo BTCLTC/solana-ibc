@@ -1,23 +1,26 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use anchor_lang::prelude::*;
+use ibc::core::ics02_client::client_state::{ClientState, UpdateKind, UpdatedState};
+use ibc::core::ics02_client::client_type::ClientType;
+use ibc::core::ics02_client::consensus_state::ConsensusState;
+use ibc::core::router::Module;
 use ibc::core::router::ModuleId;
-use ibc::{
-    core::{
-        ics02_client::{
-            client_state::ClientState, client_type::ClientType, consensus_state::ConsensusState,
-        },
-        ics03_connection::connection::ConnectionEnd,
-        ics04_channel::{
-            channel::ChannelEnd,
-            commitment::{AcknowledgementCommitment, PacketCommitment},
-            packet::{Receipt, Sequence},
-        },
-        ics24_host::identifier::{ChannelId, ClientId, ConnectionId, PortId},
-        timestamp::Timestamp,
+use ibc::core::{
+    events::IbcEvent,
+    ics02_client::height::Height,
+    ics03_connection::connection::ConnectionEnd,
+    ics04_channel::{
+        channel::ChannelEnd,
+        commitment::{AcknowledgementCommitment, PacketCommitment},
+        packet::{Receipt, Sequence},
     },
-    Height,
+    ics24_host::identifier::{ChainId, ChannelId, ClientId, ConnectionId, PortId},
+    timestamp::Timestamp,
+    MsgEnvelope, RouterError,
 };
+use std::sync::Arc;
+use std::time::Duration;
 
 mod context;
 mod error;
@@ -39,42 +42,55 @@ pub struct Initialize {}
 #[derive(Accounts)]
 
 pub struct Deliver<'info> {
-    ibc_context: Account<'info, CallIbcContext>,
+    ibc_context: Account<'info, SolanaIbcStore>,
 }
 
-#[account]
-pub struct CallIbcContext {
-    context: IbcStore,
-}
+#[derive(Debug)]
+struct HostBlock {}
 
-/// A mock of an IBC client record as it is stored in a mock context.
-/// For testing ICS02 handlers mostly, cf. `MockClientContext`.
-#[derive(Clone, Debug)]
-pub struct ClientRecord {
-    /// The type of this client.
-    pub client_type: ClientType,
+/// A context implementing the dependencies necessary for testing any IBC module.
+#[derive(Debug)]
+pub struct SolanaIbcContext {
+    // / The type of host chain underlying this mock context.
+    // host_chain_type: HostType,
+    /// Host chain identifier.
+    host_chain_id: ChainId,
 
-    /// The client state (representing only the latest height at the moment).
-    pub client_state: Option<Box<dyn ClientState>>,
+    /// Maximum size for the history of the host chain. Any block older than this is pruned.
+    max_history_size: usize,
 
-    /// Mapping of heights to consensus states for this client.
-    pub consensus_states: HashMap<Height, Box<dyn ConsensusState>>,
+    /// The chain of blocks underlying this context. A vector of size up to `max_history_size`
+    /// blocks, ascending order by their height (latest block is on the last position).
+    history: Vec<HostBlock>,
+
+    /// Average time duration between blocks
+    block_time: Duration,
+
+    /// An object that stores all IBC related data.
+    pub ibc_store: SolanaIbcStore,
+
+    /// To implement ValidationContext Router
+    router: BTreeMap<ModuleId, Arc<dyn Module>>,
+
+    pub events: Vec<IbcEvent>,
+
+    pub logs: Vec<String>,
 }
 
 type PortChannelIdMap<V> = BTreeMap<PortId, BTreeMap<ChannelId, V>>;
 
-type AnyClientState = Vec<u8>;
-type AnyConsensusState = Vec<u8>;
-
 /// An object that stores all IBC related data.
 #[account]
-pub struct IbcStore {
-    /// The set of all clients, indexed by their id.
+#[derive(Debug, Default)]
+pub struct SolanaIbcStore {
+    /// The set of all client states, indexed by their id.
+    pub client_states: BTreeMap<ClientId, Vec<u8>>,
+
+    /// The set of all consensus state, indexed by their id.
+    pub consensus_states: BTreeMap<ClientId, BTreeMap<Height, Vec<u8>>>,
+
+    /// The set of all client types, indexed by their id.
     pub client_types: BTreeMap<ClientId, ClientType>,
-
-    pub client_state: BTreeMap<ClientId, AnyClientState>,
-
-    pub consensus_states: BTreeMap<ClientId, BTreeMap<Height, AnyConsensusState>>,
 
     /// Tracks the processed time for clients header updates
     pub client_processed_times: BTreeMap<(ClientId, Height), Timestamp>,
@@ -101,7 +117,7 @@ pub struct IbcStore {
     /// Counter for channel identifiers (see `increase_channel_counter`).
     pub channel_ids_counter: u64,
 
-    /// All the channels in the store. TODO Make new key PortId X ChanneId
+    /// All the channels in the store. TODO Make new key PortId X ChannelId
     pub channels: PortChannelIdMap<ChannelEnd>,
 
     /// Tracks the sequence number for the next packet to be sent.

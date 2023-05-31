@@ -2025,6 +2025,7 @@ name = "solana-ibc"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",
+ "borsh",
  "ibc",
  "ibc-proto",
  "ics06-solomachine",
