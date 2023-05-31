@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
 
 use anchor_lang::prelude::*;
-use ibc::core::ics02_client::client_state::{ClientState, UpdateKind, UpdatedState};
 use ibc::core::ics02_client::client_type::ClientType;
-use ibc::core::ics02_client::consensus_state::ConsensusState;
 use ibc::core::router::Module;
 use ibc::core::router::ModuleId;
 use ibc::core::{
@@ -17,7 +15,6 @@ use ibc::core::{
     },
     ics24_host::identifier::{ChainId, ChannelId, ClientId, ConnectionId, PortId},
     timestamp::Timestamp,
-    MsgEnvelope, RouterError,
 };
 use std::sync::Arc;
 use std::time::Duration;
